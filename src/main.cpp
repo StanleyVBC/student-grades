@@ -1,125 +1,166 @@
 #include "Person.h"
-#include <algorithm>
-#include <fstream>
-#include <iomanip>
+
 #include <iostream>
-#include <stdexcept>
-#include <string>
+#include <fstream>
 #include <vector>
+#include <iomanip>
+#include <algorithm>
+#include <random>
+#include <string>
 
-static void printHeader() {
-    std::cout << std::left << std::setw(12) << "Name"
-              << std::left << std::setw(15) << "Surname"
-              << std::right << std::setw(12) << "Final(Avg.)"
+static void printTable(const std::vector<Person>& students) {
+    std::cout << std::left
+              << std::setw(15) << "Name"
+              << std::setw(20) << "Surname"
+              << std::right
+              << std::setw(15) << "Final (Avg.)"
               << " | "
-              << std::setw(12) << "Final(Med.)"
+              << std::setw(15) << "Final (Med.)"
               << "\n";
-    std::cout << std::string(12 + 15 + 12 + 3 + 12, '-') << "\n";
+
+    std::cout << std::string(15 + 20 + 15 + 3 + 15, '-') << "\n";
+
+    std::cout << std::fixed << std::setprecision(2);
+    for (const auto& s : students) {
+        std::cout << std::left
+                  << std::setw(15) << s.name()
+                  << std::setw(20) << s.surname()
+                  << std::right
+                  << std::setw(15) << s.finalAvg()
+                  << " | "
+                  << std::setw(15) << s.finalMed()
+                  << "\n";
+    }
 }
 
-static void sortStudents(std::vector<Person>& v) {
-    std::sort(v.begin(), v.end(), [](const Person& a, const Person& b) {
-        if (a.surname() != b.surname()) return a.surname() < b.surname();
-        return a.name() < b.name();
-    });
+static void sortStudents(std::vector<Person>& students, int mode) {
+    if (mode == 1) { // sort by name
+        std::sort(students.begin(), students.end(),
+            [](const Person& a, const Person& b) {
+                if (a.name() == b.name()) return a.surname() < b.surname();
+                return a.name() < b.name();
+            });
+    } else { // sort by surname
+        std::sort(students.begin(), students.end(),
+            [](const Person& a, const Person& b) {
+                if (a.surname() == b.surname()) return a.name() < b.name();
+                return a.surname() < b.surname();
+            });
+    }
 }
 
-static std::vector<Person> readFromFile(const std::string& filePath, bool freeHwForBigData) {
-    std::ifstream fin(filePath);
-    if (!fin) throw std::runtime_error("Cannot open file: " + filePath);
+static std::vector<Person> readFromFile(const std::string& path) {
+    std::ifstream fin(path);
+    if (!fin) {
+        throw std::runtime_error("Cannot open file: " + path);
+    }
 
     std::vector<Person> students;
-    students.reserve(10000);
-
-    // skip header line (e.g. "Name Surname ND1 ND2 ... Egz.")
-    std::string header;
-    std::getline(fin, header);
+    std::string headerLine;
+    std::getline(fin, headerLine); // skip header
 
     Person p;
     while (fin >> p) {
-        if (freeHwForBigData) {
-            // optional memory saver for 100k/1M
-            p.clearHwToSaveMemory();
-        }
         students.push_back(p);
     }
     return students;
 }
 
-static Person readOneInteractive() {
-    std::cout << "\nEnter ONE student in this format:\n";
-    std::cout << "Name Surname HW1 HW2 ... 0 Exam\n";
-    std::cout << "Example: Jonas Jonaitis 8 9 10 7 0 9\n\n";
-    Person p;
-    std::cin >> p;
-    return p;
+static std::vector<Person> randomGenerate(int count, int hwCount) {
+    std::vector<Person> students;
+    students.reserve(count);
+
+    std::mt19937 rng((unsigned)std::random_device{}());
+    std::uniform_int_distribution<int> dist(1, 10);
+
+    for (int i = 1; i <= count; ++i) {
+        Person p("Name" + std::to_string(i), "Surname" + std::to_string(i));
+
+        std::vector<int> hw;
+        hw.reserve(hwCount);
+        for (int j = 0; j < hwCount; ++j) hw.push_back(dist(rng));
+
+        p.setHomework(std::move(hw));
+        p.setExam(dist(rng));
+        p.calculateFinals();
+
+        students.push_back(p);
+    }
+    return students;
+}
+
+static std::vector<Person> manualInput() {
+    int count;
+    std::cout << "How many students? ";
+    std::cin >> count;
+    std::cin.ignore(10000, '\n');
+
+    std::vector<Person> students;
+    students.reserve(count);
+
+    std::cout << "\nEnter each student in ONE LINE:\n";
+    std::cout << "Name Surname HW1 HW2 ... HWn Exam\n";
+    std::cout << "Example: John Doe 8 9 10 6 9\n\n";
+
+    for (int i = 0; i < count; ++i) {
+        std::cout << "Student " << (i + 1) << ": ";
+        Person p;
+        std::cin >> p;
+        students.push_back(p);
+    }
+    return students;
 }
 
 int main() {
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
 
-    std::cout << "===== Student Final Grade Calculator (v0.1) =====\n";
-    std::cout << "1) Enter students manually\n";
-    std::cout << "2) Generate random students\n";
-    std::cout << "3) Read from file (data/Students.txt)\n";
-    std::cout << "Choose: ";
-
-    int choice = 0;
-    std::cin >> choice;
-
-    std::vector<Person> students;
-
     try {
+        std::cout << "=== Student Grades (v0.1) ===\n";
+        std::cout << "1) Manual input\n";
+        std::cout << "2) Random generate\n";
+        std::cout << "3) Read from file (data/Students.txt)\n";
+        std::cout << "Choose: ";
+
+        int choice;
+        std::cin >> choice;
+
+        std::vector<Person> students;
+
         if (choice == 1) {
-            int k;
-            std::cout << "How many students? ";
-            std::cin >> k;
-            students.reserve(k);
-
-            for (int i = 0; i < k; i++) {
-                students.push_back(readOneInteractive());
-            }
+            students = manualInput();
         } else if (choice == 2) {
-            int k;
-            std::size_t hwCount;
-            std::cout << "How many students to generate? ";
-            std::cin >> k;
+            int n, hwN;
+            std::cout << "How many students? ";
+            std::cin >> n;
             std::cout << "How many homework marks per student? ";
-            std::cin >> hwCount;
-
-            students.reserve(k);
-            for (int i = 0; i < k; i++) {
-                Person p("Name" + std::to_string(i + 1), "Surname" + std::to_string(i + 1));
-                p.generateRandom(hwCount);
-                students.push_back(p);
-            }
+            std::cin >> hwN;
+            students = randomGenerate(n, hwN);
         } else if (choice == 3) {
-            std::string path;
-            std::cout << "File path (example: data/Students.txt): ";
-            std::cin >> path;
-
-            // For very large datasets, freeing HW vectors saves a lot of memory.
-            bool freeHwForBigData = true;
-            students = readFromFile(path, freeHwForBigData);
+            students = readFromFile("data/Students.txt");
         } else {
-            std::cout << "Invalid choice.\n";
+            std::cout << "Wrong option.\n";
             return 0;
         }
 
-        sortStudents(students);
+        int sortMode;
+        std::cout << "\nSort by: 1) Name  2) Surname : ";
+        std::cin >> sortMode;
+        if (sortMode != 1) sortMode = 2;
 
-        printHeader();
+        sortStudents(students, sortMode);
 
-        // For 100k/1M, better redirect output:
-        // ./app > results.txt
-        for (const auto& s : students) {
-            std::cout << s << "\n";
-        }
+        std::cout << "\nComputed finals:\n";
+        std::cout << "Final = 0.4 * HW + 0.6 * Exam\n";
+        std::cout << "HW uses BOTH: average and median\n\n";
+
+        printTable(students);
 
         std::cout << "\nDone. Students: " << students.size() << "\n";
-    } catch (const std::exception& e) {
-        std::cout << "ERROR: " << e.what() << "\n";
+    }
+    catch (const std::exception& ex) {
+        std::cerr << "\nERROR: " << ex.what() << "\n";
+        return 1;
     }
 
     return 0;
